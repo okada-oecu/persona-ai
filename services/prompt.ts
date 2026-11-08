@@ -1,6 +1,6 @@
 import { World } from '../types';
 
-export const GEMINI_MODEL = 'gemini-3.8-flash';
+export const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 export const buildSystemInstruction = (world: World): string => {
   const charactersDesc = (world.characters || []).map(c =>

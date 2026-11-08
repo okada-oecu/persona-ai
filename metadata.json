@@ -1,6 +1,6 @@
 {
   "name": "Persona.AI - 無限のストーリー",
-  "description": "Gemini 3 Flashを使って、完全にカスタマイズ可能なAIキャラクターを作成し、チャットを楽しもう。性格をデザインし、ロールプレイのシナリオを作り、無限の会話に没頭しましょう。",
+  "description": "Gemini 3.5 Flash-Liteを使って、完全にカスタマイズ可能なAIキャラクターを作成し、チャットを楽しもう。性格をデザインし、ロールプレイのシナリオを作り、無限の会話に没頭しましょう。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
