@@ -1,8 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Content } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-import { buildSystemInstruction, GEMINI_MODEL, GENERATION_CONFIG } from './services/prompt';
+import { buildSystemInstruction, GEMINI_MODEL, generationConfig, toGeminiHistory, friendlyErrorMessage } from './services/prompt';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -22,7 +22,7 @@ const ai = new GoogleGenAI({
 
 // API Routes
 app.post('/api/chat/stream', async (req, res) => {
-  const { world, history, message } = req.body;
+  const { world, history, message, settings } = req.body;
 
   if (!world || !message) {
     res.status(400).json({ error: 'World and message are required' });
@@ -30,20 +30,15 @@ app.post('/api/chat/stream', async (req, res) => {
   }
 
   try {
-    const systemInstruction = buildSystemInstruction(world);
-
-    const formattedHistory: Content[] = (history || []).map((msg: any) => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }],
-    }));
+    const systemInstruction = buildSystemInstruction(world, settings);
 
     const chatSession = ai.chats.create({
       model: GEMINI_MODEL,
       config: {
         systemInstruction,
-        ...GENERATION_CONFIG,
+        ...generationConfig(settings),
       },
-      history: formattedHistory,
+      history: toGeminiHistory(history || []) as any,
     });
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -61,16 +56,33 @@ app.post('/api/chat/stream', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('Error in /api/chat/stream:', error);
-    let errMsg = error?.message || 'Internal server error';
-    if (errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Quota exceeded') || error?.status === 429) {
-      errMsg = 'APIの無料利用枠（クォータ上限）に達しました。Settings > Secrets から課金が有効なAPIキーを選択するか、時間をおいて再度お試しください。';
-    }
+    const errMsg = friendlyErrorMessage(error);
     if (!res.headersSent) {
       res.status(500).json({ error: errMsg });
     } else {
       res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
       res.end();
     }
+  }
+});
+
+// あらすじ要約などの一括生成
+app.post('/api/generate', async (req, res) => {
+  const { prompt, temperature } = req.body;
+  if (!prompt) {
+    res.status(400).json({ error: 'prompt is required' });
+    return;
+  }
+  try {
+    const result = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: { temperature: temperature ?? 0.3 },
+    });
+    res.json({ text: result.text || '' });
+  } catch (error: any) {
+    console.error('Error in /api/generate:', error);
+    res.status(500).json({ error: friendlyErrorMessage(error) });
   }
 });
 

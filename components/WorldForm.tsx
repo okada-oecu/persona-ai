@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { World, Character } from '../types';
 import { STORAGE_KEYS, loadJSON, saveJSON, removeKey } from '../services/storage';
-import { Sparkles, ArrowLeft, Plus, Trash2, Globe, User, Users, Save } from 'lucide-react';
+import { Sparkles, ArrowLeft, Plus, Trash2, Globe, User, Users, Save, Pencil, ImagePlus, X } from 'lucide-react';
+import { Avatar, resizeImageFile } from './Avatar';
 
 interface WorldFormProps {
   onSave: (world: World) => void;
@@ -22,6 +23,8 @@ interface WorldDraft {
   tempCharName: string;
   tempCharTagline: string;
   tempCharDesc: string;
+  tempCharImage?: string;
+  editingCharId?: string | null;
 }
 
 export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialData }) => {
@@ -49,6 +52,10 @@ export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialD
   const [tempCharName, setTempCharName] = useState(draft?.tempCharName ?? '');
   const [tempCharTagline, setTempCharTagline] = useState(draft?.tempCharTagline ?? '');
   const [tempCharDesc, setTempCharDesc] = useState(draft?.tempCharDesc ?? '');
+  const [tempCharImage, setTempCharImage] = useState<string | undefined>(draft?.tempCharImage);
+  // 編集中のNPC（null なら新規追加）
+  const [editingCharId, setEditingCharId] = useState<string | null>(draft?.editingCharId ?? null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // 入力のたびに下書きを自動セーブ
   useEffect(() => {
@@ -56,11 +63,11 @@ export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialD
       saveJSON(STORAGE_KEYS.worldDraft, {
         forWorldId: initialData?.id || null,
         step, title, setting, protagonistName, protagonistDesc, characters,
-        tempCharName, tempCharTagline, tempCharDesc,
+        tempCharName, tempCharTagline, tempCharDesc, tempCharImage, editingCharId,
       } satisfies WorldDraft);
     }, 400);
     return () => clearTimeout(timer);
-  }, [step, title, setting, protagonistName, protagonistDesc, characters, tempCharName, tempCharTagline, tempCharDesc, initialData?.id]);
+  }, [step, title, setting, protagonistName, protagonistDesc, characters, tempCharName, tempCharTagline, tempCharDesc, tempCharImage, editingCharId, initialData?.id]);
 
   const handleCancel = () => {
     const hasInput = title || setting || protagonistName || protagonistDesc || characters.length > 0;
@@ -69,24 +76,58 @@ export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialD
     onCancel();
   };
 
-  const addCharacter = () => {
-    if (!tempCharName || !tempCharDesc) return;
-    const newChar: Character = {
-      id: Date.now().toString(),
-      name: tempCharName,
-      tagline: tempCharTagline,
-      description: tempCharDesc,
-      avatarSeed: tempCharName + Date.now(),
-      themeColor: THEME_COLORS[characters.length % THEME_COLORS.length]
-    };
-    setCharacters([...characters, newChar]);
+  const resetCharForm = () => {
     setTempCharName('');
     setTempCharTagline('');
     setTempCharDesc('');
+    setTempCharImage(undefined);
+    setEditingCharId(null);
+  };
+
+  /** 新規追加、または編集中のNPCを更新 */
+  const submitCharacter = () => {
+    if (!tempCharName || !tempCharDesc) return;
+    if (editingCharId) {
+      setCharacters(characters.map(c => c.id === editingCharId
+        ? { ...c, name: tempCharName, tagline: tempCharTagline, description: tempCharDesc, avatarImage: tempCharImage }
+        : c));
+    } else {
+      const newChar: Character = {
+        id: Date.now().toString(),
+        name: tempCharName,
+        tagline: tempCharTagline,
+        description: tempCharDesc,
+        avatarSeed: tempCharName + Date.now(),
+        themeColor: THEME_COLORS[characters.length % THEME_COLORS.length],
+        ...(tempCharImage ? { avatarImage: tempCharImage } : {}),
+      };
+      setCharacters([...characters, newChar]);
+    }
+    resetCharForm();
+  };
+
+  const startEditCharacter = (c: Character) => {
+    setEditingCharId(c.id);
+    setTempCharName(c.name);
+    setTempCharTagline(c.tagline);
+    setTempCharDesc(c.description);
+    setTempCharImage(c.avatarImage);
   };
 
   const removeCharacter = (id: string) => {
     setCharacters(characters.filter(c => c.id !== id));
+    if (editingCharId === id) resetCharForm();
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      setTempCharImage(await resizeImageFile(file));
+    } catch {
+      alert('画像を読み込めませんでした。別の画像を選んでください。');
+    }
   };
 
   const handleSave = () => {
@@ -207,27 +248,60 @@ export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialD
             {/* List */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto custom-scrollbar pr-2">
               {characters.map(char => (
-                <div key={char.id} className="bg-gray-800 p-3 rounded-lg flex items-center gap-3 border border-gray-700">
-                  <img src={`https://picsum.photos/seed/${char.avatarSeed}/50`} className="w-10 h-10 rounded-full" alt="" />
+                <div key={char.id} className={`bg-gray-800 p-3 rounded-lg flex items-center gap-3 border ${editingCharId === char.id ? 'border-cyan-500' : 'border-gray-700'}`}>
+                  <Avatar character={char} />
                   <div className="flex-1 overflow-hidden">
                     <div className="font-bold truncate">{char.name}</div>
                     <div className="text-xs text-gray-400 truncate">{char.tagline}</div>
                   </div>
-                  <button onClick={() => removeCharacter(char.id)} className="text-gray-500 hover:text-red-400">
+                  <button onClick={() => startEditCharacter(char)} className="text-gray-500 hover:text-cyan-400 p-1" title="編集">
+                    <Pencil size={18} />
+                  </button>
+                  <button onClick={() => removeCharacter(char.id)} className="text-gray-500 hover:text-red-400 p-1" title="削除">
                     <Trash2 size={18} />
                   </button>
                 </div>
               ))}
               {characters.length === 0 && (
                 <div className="col-span-full text-center text-gray-500 py-4 text-sm">
-                  まだキャラクターがいません。右側（スマホなら下）で追加してください。
+                  まだキャラクターがいません。下のフォームで追加してください。
                 </div>
               )}
             </div>
 
             {/* Add Form */}
-            <div className="bg-black/30 p-4 rounded-xl border border-gray-800 space-y-4">
-              <div className="flex gap-4">
+            <div className={`bg-black/30 p-4 rounded-xl border space-y-4 ${editingCharId ? 'border-cyan-700' : 'border-gray-800'}`}>
+              {editingCharId && (
+                <div className="flex items-center justify-between text-sm text-cyan-300">
+                  <span>NPCを編集中</span>
+                  <button onClick={resetCharForm} className="flex items-center gap-1 text-gray-400 hover:text-white"><X size={14} /> やめる</button>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="relative flex-shrink-0 rounded-full group"
+                  title="アイコン画像を選ぶ（任意）"
+                >
+                  {tempCharImage || tempCharName ? (
+                    <Avatar character={{ name: tempCharName || '?', themeColor: THEME_COLORS[characters.length % THEME_COLORS.length], avatarImage: tempCharImage }} size="lg" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-gray-800 border border-dashed border-gray-600 flex items-center justify-center text-gray-500">
+                      <ImagePlus size={22} />
+                    </div>
+                  )}
+                  <span className="absolute -bottom-1 -right-1 bg-gray-700 rounded-full p-1 text-gray-200"><ImagePlus size={12} /></span>
+                </button>
+                <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                <div className="text-xs text-gray-500">
+                  アイコン画像（任意）
+                  {tempCharImage && (
+                    <button onClick={() => setTempCharImage(undefined)} className="block text-gray-400 hover:text-red-400 mt-1">画像を外す</button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4">
                 <input
                   value={tempCharName}
                   onChange={(e) => setTempCharName(e.target.value)}
@@ -248,11 +322,11 @@ export const WorldForm: React.FC<WorldFormProps> = ({ onSave, onCancel, initialD
                 className="w-full h-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 resize-none"
               />
               <button
-                onClick={addCharacter}
+                onClick={submitCharacter}
                 disabled={!tempCharName || !tempCharDesc}
-                className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Plus size={16} /> リストに追加
+                {editingCharId ? <><Save size={16} /> NPCを更新</> : <><Plus size={16} /> リストに追加</>}
               </button>
             </div>
 
