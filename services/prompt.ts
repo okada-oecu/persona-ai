@@ -23,7 +23,10 @@ export const buildSystemInstruction = (world: World, settings: StorySettings = D
   ).join('\n\n');
 
   const summaryBlock = world.summary
-    ? `\n    【これまでのあらすじ（古い会話の要約）】\n    ${world.summary}\n`
+    ? `\n    【これまでのあらすじ（古い会話の要約）】\n${world.summary}\n`
+    : '';
+  const memoBlock = world.memo?.trim()
+    ? `\n    【記憶メモ（プレイヤーが記録した確定事項。必ず守り、矛盾させないこと）】\n${world.memo.trim()}\n`
     : '';
 
   return `
@@ -39,7 +42,7 @@ export const buildSystemInstruction = (world: World, settings: StorySettings = D
 
     【登場キャラクター (NPC)】
     ${charactersDesc}
-${summaryBlock}
+${summaryBlock}${memoBlock}
     【基本指示】
     1. あなたは状況描写（ナレーション）と、その場にいるNPCのセリフを出力します。
     2. NPCが話すときは、必ず行頭に「[キャラクター名]: セリフ」の形式で出力してください。
@@ -54,6 +57,7 @@ ${summaryBlock}
     ・**ユーザー（主人公）の行動、発言、感情、思考を勝手に描写しないでください。** これは絶対禁止です（God Moddingの禁止）。
     ・一度の出力で解決しようとせず、ユーザーとの対話のキャッチボール（ターン制）を維持してください。
     ・ユーザーが介入する余地を残すため、シーンを完結させすぎないようにしてください。
+    ・**これまでの会話・あらすじ・記憶メモで起きた出来事、人間関係、約束、負傷、所持品、決めた設定と矛盾しないでください。** 登場人物は過去のやり取りを覚えている前提で振る舞ってください。
 
     最初のメッセージは、この世界の導入（ナレーション）と、主人公が最初に遭遇する状況、あるいはNPCからの呼びかけから始めてください。
   `;
@@ -80,7 +84,17 @@ export const buildSummaryPrompt = (world: World, previousSummary: string | undef
   const log = messages
     .map(m => (m.role === 'user' ? `【${world.protagonist?.name || '主人公'}】${m.text}` : m.text))
     .join('\n\n');
-  return `以下はロールプレイ「${world.title}」の会話ログです。今後の物語を続けるために必要な情報（起きた出来事、登場人物の関係や感情の変化、約束・伏線、所持品、現在地など）を漏らさず、日本語で簡潔なあらすじ（800文字以内）にまとめてください。あらすじ本文だけを出力してください。
+  return `以下はロールプレイ「${world.title}」のこれまでのあらすじと、その続きの会話ログです。
+物語をこの先も矛盾なく続けるための「記録」を、日本語で作り直してください。これまでのあらすじの内容も捨てずに統合してください。
+
+次の見出しで、箇条書き中心に書いてください（全体で3000文字以内）。
+■ 出来事の流れ（時系列。重要な場面ほど具体的に）
+■ 登場人物ごとの状態と主人公との関係（好感度・信頼・敵対、交わした約束、知っている秘密）
+■ 主人公の状態（負傷、所持品・装備、所持金・借金、評判）
+■ 未解決の謎・伏線・進行中の依頼
+■ 現在の状況（場所、時間帯、一緒にいる人物、直前の場面）
+
+記録の本文だけを出力してください。
 
 ${previousSummary ? `【これまでのあらすじ】\n${previousSummary}\n\n` : ''}【続きの会話ログ】
 ${log}`;

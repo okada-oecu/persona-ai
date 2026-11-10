@@ -24,6 +24,8 @@ export interface World {
   messages?: Message[];
   /** 古い会話の要約（長編でAIに送る量を減らすため） */
   summary?: string;
+  /** プレイヤーが書く「必ず覚えておくこと」メモ */
+  memo?: string;
   /** summary に含まれている先頭からのメッセージ数 */
   summarizedCount?: number;
 }

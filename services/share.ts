@@ -79,6 +79,7 @@ export const normalizeImportedWorld = (w: Partial<World>, keepId = false): World
   createdAt: w.createdAt || Date.now(),
   messages: w.messages || [],
   ...(w.summary ? { summary: w.summary, summarizedCount: w.summarizedCount || 0 } : {}),
+  ...(w.memo ? { memo: w.memo } : {}),
 });
 
 export const downloadJSON = (data: unknown, filename: string) => {

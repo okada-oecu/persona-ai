@@ -16,10 +16,25 @@ interface ChatInterfaceProps {
   onOpenSettings: () => void;
 }
 
-// 未要約の会話がこの件数を超えたら、古い部分をあらすじにまとめる
-const SUMMARY_TRIGGER = 40;
-// 要約後も原文のまま送る直近の件数
-const KEEP_RECENT = 20;
+// Flash-Lite は大量の文章を読めるので、会話はなるべく原文のまま送る。
+// 未要約の会話がこの文字数を超えたら、古い部分だけをあらすじにまとめる
+const SUMMARY_TRIGGER_CHARS = 80_000;
+// 要約後も原文のまま送る直近の文字数（最低 KEEP_MIN_MESSAGES 件は残す）
+const KEEP_RECENT_CHARS = 40_000;
+const KEEP_MIN_MESSAGES = 30;
+
+const countChars = (msgs: Message[]) => msgs.reduce((n, m) => n + m.text.length, 0);
+
+/** 直近 KEEP_RECENT_CHARS 文字ぶんを残したとき、要約に回す範囲の終わり（index） */
+const findSummaryCut = (all: Message[], from: number) => {
+  let kept = 0;
+  let cut = all.length;
+  while (cut > from && (kept < KEEP_RECENT_CHARS || all.length - cut < KEEP_MIN_MESSAGES)) {
+    cut--;
+    kept += all[cut].text.length;
+  }
+  return cut;
+};
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -90,8 +105,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ world, onExit, onU
   const maybeSummarize = async (all: Message[]) => {
     const w = worldRef.current;
     const done = w.summarizedCount || 0;
-    if (summarizingRef.current || all.length - done <= SUMMARY_TRIGGER) return;
-    const upto = all.length - KEEP_RECENT;
+    if (summarizingRef.current || countChars(all.slice(done)) <= SUMMARY_TRIGGER_CHARS) return;
+    const upto = findSummaryCut(all, done);
+    if (upto <= done) return;
     summarizingRef.current = true;
     try {
       const summary = (await generateText(buildSummaryPrompt(w, w.summary, all.slice(done, upto)))).trim();
@@ -264,12 +280,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ world, onExit, onU
               </div>
             ))}
           </div>
-          {world.summary && (
-            <>
-              <h3 className="font-bold text-white mb-1">これまでのあらすじ（自動要約）</h3>
-              <p className="whitespace-pre-wrap text-gray-400 text-xs leading-relaxed">{world.summary}</p>
-            </>
-          )}
+          <h3 className="font-bold text-white mb-1">記憶メモ</h3>
+          <p className="text-xs text-gray-500 mb-1">AIに必ず覚えておいてほしいこと（関係性、約束、所持品、決めた設定など）。毎回AIに渡されます。</p>
+          <MemoField
+            value={world.memo || ''}
+            placeholder="例：ソフィアに5000エディの借りがある / グリッチとは相棒関係 / 左腕を負傷中"
+            onSave={memo => onUpdateWorld(world.id, { memo })}
+          />
+          <h3 className="font-bold text-white mt-4 mb-1">これまでのあらすじ（自動要約）</h3>
+          <p className="text-xs text-gray-500 mb-1">
+            会話がとても長くなると、古い部分がここに自動でまとめられます（{(world.summarizedCount || 0)}件ぶん要約済み）。間違いは直接書き換えられます。
+          </p>
+          <MemoField
+            value={world.summary || ''}
+            placeholder="まだ要約はありません"
+            onSave={summary => onUpdateWorld(world.id, { summary: summary || undefined })}
+          />
         </div>
       )}
 
@@ -426,5 +452,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ world, onExit, onU
         </div>
       </div>
     </div>
+  );
+};
+
+/** 入力欄からフォーカスが外れたときに保存するテキスト欄 */
+const MemoField: React.FC<{ value: string; placeholder: string; onSave: (v: string) => void }> = ({ value, placeholder, onSave }) => {
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  return (
+    <textarea
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onBlur={() => { if (text !== value) onSave(text.trim()); }}
+      placeholder={placeholder}
+      rows={4}
+      className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-xs text-gray-200 leading-relaxed focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y"
+    />
   );
 };

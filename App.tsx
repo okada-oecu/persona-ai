@@ -155,8 +155,8 @@ const App: React.FC = () => {
   };
 
   const handleResetStory = (world: World) => {
-    if (!confirm(`「${world.title}」の会話をすべて消して、最初から始めますか？`)) return;
-    setWorlds(prev => prev.map(w => (w.id === world.id ? { ...w, messages: [], summary: undefined, summarizedCount: 0 } : w)));
+    if (!confirm(`「${world.title}」の会話・あらすじ・記憶メモをすべて消して、最初から始めますか？`)) return;
+    setWorlds(prev => prev.map(w => (w.id === world.id ? { ...w, messages: [], summary: undefined, summarizedCount: 0, memo: undefined } : w)));
     setShareTarget(null);
   };
 
@@ -498,7 +498,7 @@ const ShareModal: React.FC<{ world: World; onClose: () => void; onReset: (w: Wor
           </button>
           <button
             onClick={() => {
-              const { messages, summary, summarizedCount, ...settingsOnly } = world;
+              const { messages, summary, summarizedCount, memo, ...settingsOnly } = world;
               downloadJSON(settingsOnly, `${safeName}-設定のみ.json`);
             }}
             className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm"
